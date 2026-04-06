@@ -7,20 +7,20 @@ async function main() {
         const mnemonic = process.env.MNEMONIC;
         if (!mnemonic) throw new Error("MNEMONIC absent du .env");
 
+        // Ajout de la clé API pour contourner la limite de Vast.ai
         const client = new TonClient({ 
-            endpoint: "https://testnet.toncenter.com/api/v2/jsonRPC" 
+            endpoint: "https://testnet.toncenter.com/api/v2/jsonRPC",
+            apiKey: "6df031fa12e11505c5785ce6f2c57e9a5bbd79a170413899aaf6cff6a0fcf167" 
         });
 
-        // 1. Génération de la clé et du wallet v4r2
         const key = await mnemonicToWalletKey(mnemonic.split(" "));
         const wallet = WalletContractV4.create({ publicKey: key.publicKey, workchain: 0 });
         const contract = client.open(wallet);
 
-        // 2. Vérification de l'adresse et du solde
         const addr = wallet.address.toString({ testOnly: true, bounceable: false });
         const balance = await contract.getBalance();
 
-        console.log(`\n💎 CONFIGURATION V4R2 :`);
+        console.log(`\n💎 CONFIGURATION V4R2 (Avec API Key) :`);
         console.log(`📍 Adresse : ${addr}`);
         console.log(`💰 Solde actuel : ${fromNano(balance)} TON`);
 
@@ -29,7 +29,6 @@ async function main() {
             return;
         }
 
-        // 3. Envoi de l'inscription (2 TON de caution + gaz)
         console.log("🔗 Envoi de l'inscription au contrat Cocoon...");
         await contract.sendTransfer({
             seqno: await contract.getSeqno(),
@@ -37,13 +36,13 @@ async function main() {
             messages: [
                 internal({
                     to: "EQBl7aOQEoRi-I5qgctzI89gAnsbV6exEMKrsa5yDp7ZPcZE",
-                    value: toNano("2.05"), // On envoie 2.05 pour être sûr que le contrat reçoive ses 2 TON
+                    value: toNano("2.05"), 
                     body: "RegisterWorker",
                 })
             ]
         });
 
-        console.log("🚀 TRANSACTION ENVOYÉE ! Vérifie Tonscan d'ici 10 secondes.");
+        console.log("🚀 TRANSACTION ENVOYÉE ! Le réseau TON la traite en ce moment même.");
     } catch (e) {
         console.error("❌ ERREUR :", e.message);
     }
