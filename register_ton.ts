@@ -1,6 +1,7 @@
 import * as dotenv from 'dotenv';
 dotenv.config();
-import { TonClient, WalletContractV4, toNano } from "@ton/ton";
+// Ajout de 'Address' dans les imports
+import { TonClient, WalletContractV4, toNano, Address } from "@ton/ton"; 
 import { mnemonicToWalletKey } from "@ton/crypto";
 import { DepinTask } from './DepinTask_DepinTask'; 
 
@@ -16,17 +17,16 @@ async function main() {
 
         const key = await mnemonicToWalletKey(mnemonic.split(" "));
         const wallet = WalletContractV4.create({ publicKey: key.publicKey, workchain: 0 });
-        const contractAddress = "EQBl7aOQEoRi-I5qgctzI89gAnsbV6exEMKrsa5yDp7ZPcZE";
         
-        // On connecte le wrapper à l'adresse de ton contrat
+        // 🛠️ LA CORRECTION EST ICI : on utilise Address.parse()
+        const contractAddress = Address.parse("EQBl7aOQEoRi-I5qgctzI89gAnsbV6exEMKrsa5yDp7ZPcZE");
         const depinContract = client.open(DepinTask.fromAddress(contractAddress));
         
         console.log("🔗 Envoi de l'inscription via le Wrapper Tact...");
         
-        // La méthode send() s'occupe de tout le formatage binaire !
         await depinContract.send(
             client.open(wallet).sender(key.secretKey),
-            { value: toNano("2.05") }, // 2 TON caution + 0.05 gaz
+            { value: toNano("2.05") },
             {
                 $$type: "RegisterWorker",
                 endpoint: process.argv[2] || "https://depin-node-ton.ngrok.io",
