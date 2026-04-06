@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { TonClient, WalletContractV4, internal, Address, toNano } = require("@ton/ton");
 const { mnemonicToWalletKey } = require("@ton/crypto");
 
