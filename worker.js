@@ -63,4 +63,4 @@ app.post('/api/generate', async (req, res) => {
     }
 });
 
-app.listen(3000, () => console.log(`🟢 Worker TON actif sur le port 3000`));
+app.listen(3001, () => console.log(`🟢 Worker TON actif sur le port 3001`));
