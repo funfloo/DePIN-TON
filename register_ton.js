@@ -1,13 +1,14 @@
-require('dotenv').config();
-const { TonClient, WalletContractV4, internal, toNano, fromNano } = require("@ton/ton");
-const { mnemonicToWalletKey } = require("@ton/crypto");
+import * as dotenv from 'dotenv';
+dotenv.config();
+import { TonClient, WalletContractV4, toNano } from "@ton/ton";
+import { mnemonicToWalletKey } from "@ton/crypto";
+import { DepinTask } from './DepinTask_DepinTask'; 
 
 async function main() {
     try {
         const mnemonic = process.env.MNEMONIC;
         if (!mnemonic) throw new Error("MNEMONIC absent du .env");
 
-        // Ajout de la clé API pour contourner la limite de Vast.ai
         const client = new TonClient({ 
             endpoint: "https://testnet.toncenter.com/api/v2/jsonRPC",
             apiKey: "6df031fa12e11505c5785ce6f2c57e9a5bbd79a170413899aaf6cff6a0fcf167" 
@@ -15,36 +16,27 @@ async function main() {
 
         const key = await mnemonicToWalletKey(mnemonic.split(" "));
         const wallet = WalletContractV4.create({ publicKey: key.publicKey, workchain: 0 });
-        const contract = client.open(wallet);
+        const contractAddress = "EQBl7aOQEoRi-I5qgctzI89gAnsbV6exEMKrsa5yDp7ZPcZE";
+        
+        // On connecte le wrapper à l'adresse de ton contrat
+        const depinContract = client.open(DepinTask.fromAddress(contractAddress));
+        
+        console.log("🔗 Envoi de l'inscription via le Wrapper Tact...");
+        
+        // La méthode send() s'occupe de tout le formatage binaire !
+        await depinContract.send(
+            client.open(wallet).sender(key.secretKey),
+            { value: toNano("2.05") }, // 2 TON caution + 0.05 gaz
+            {
+                $$type: "RegisterWorker",
+                endpoint: process.argv[2] || "https://depin-node-ton.ngrok.io",
+                pricePerChar: BigInt(process.argv[3] || 10)
+            }
+        );
 
-        const addr = wallet.address.toString({ testOnly: true, bounceable: false });
-        const balance = await contract.getBalance();
-
-        console.log(`\n💎 CONFIGURATION V4R2 (Avec API Key) :`);
-        console.log(`📍 Adresse : ${addr}`);
-        console.log(`💰 Solde actuel : ${fromNano(balance)} TON`);
-
-        if (balance < toNano("2.08")) {
-            console.log(`❌ ERREUR : Solde insuffisant (${fromNano(balance)}). Il faut au moins 2.1 TON.`);
-            return;
-        }
-
-        console.log("🔗 Envoi de l'inscription au contrat Cocoon...");
-        await contract.sendTransfer({
-            seqno: await contract.getSeqno(),
-            secretKey: key.secretKey,
-            messages: [
-                internal({
-                    to: "EQBl7aOQEoRi-I5qgctzI89gAnsbV6exEMKrsa5yDp7ZPcZE",
-                    value: toNano("2.05"), 
-                    body: "RegisterWorker",
-                })
-            ]
-        });
-
-        console.log("🚀 TRANSACTION ENVOYÉE ! Le réseau TON la traite en ce moment même.");
+        console.log("🚀 TRANSACTION ENVOYÉE ! Le Smart Contract va maintenant l'accepter.");
     } catch (e) {
-        console.error("❌ ERREUR :", e.message);
+        console.error("❌ ERREUR :", e);
     }
 }
 main();
