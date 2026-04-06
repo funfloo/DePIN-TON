@@ -1,51 +1,58 @@
 require('dotenv').config();
-const { TonClient, WalletContractV4, WalletContractV5R1, internal, toNano, fromNano } = require("@ton/ton");
+const { TonClient, WalletContractV5R1, internal, toNano, fromNano } = require("@ton/ton");
 const { mnemonicToWalletKey } = require("@ton/crypto");
 
 async function main() {
     try {
         const mnemonic = process.env.MNEMONIC;
-        if (!mnemonic) throw new Error("MNEMONIC manquant dans le .env");
-
         const client = new TonClient({ endpoint: "https://testnet.toncenter.com/api/v2/jsonRPC" });
         const key = await mnemonicToWalletKey(mnemonic.split(" "));
 
-        // Test des deux versions les plus communes sur TON
-        const v4 = WalletContractV4.create({ publicKey: key.publicKey, workchain: 0 });
-        const v4Contract = client.open(v4);
-        const v4Balance = await v4Contract.getBalance();
-
-        const v5 = WalletContractV5R1.create({ publicKey: key.publicKey, workchain: 0 });
-        const v5Contract = client.open(v5);
-        const v5Balance = await v5Contract.getBalance();
-
-        console.log(`\n🔎 ANALYSE DES WALLETS :`);
-        console.log(`Wallet V4R2 : ${v4.address.toString({ testOnly: true, bounceable: false })} | Solde : ${fromNano(v4Balance)} TON`);
-        console.log(`Wallet V5R1 (W5) : ${v5.address.toString({ testOnly: true, bounceable: false })} | Solde : ${fromNano(v5Balance)} TON`);
-
-        let activeContract = (v5Balance > v4Balance) ? v5Contract : v4Contract;
+        // Tonkeeper W5 utilise souvent ces deux IDs
+        const subwalletIds = [2147483649, 696618387, 0]; 
         
-        if (await activeContract.getBalance() < toNano("2.1")) {
-            throw new Error("Solde insuffisant sur V4 et V5.");
+        console.log(`\n🔎 RECHERCHE DU WALLET CORRESPONDANT...`);
+        
+        for (let id of subwalletIds) {
+            const wallet = WalletContractV5R1.create({ 
+                publicKey: key.publicKey, 
+                workchain: 0,
+                subwalletId: id 
+            });
+            const contract = client.open(wallet);
+            const balance = await contract.getBalance();
+            const addr = wallet.address.toString({ testOnly: true, bounceable: false });
+
+            console.log(`Index ${id} -> Adresse: ${addr} | Solde: ${fromNano(balance)} TON`);
+
+            // Si l'adresse correspond à ton Tonkeeper (0QCv...)
+            if (balance > toNano("0.5")) { 
+                console.log(`\n✅ WALLET TROUVÉ !`);
+                console.log(`🔗 Envoi de l'inscription depuis : ${addr}`);
+
+                const seqno = await contract.getSeqno();
+                await contract.sendTransfer({
+                    seqno: seqno,
+                    secretKey: key.secretKey,
+                    messages: [
+                        internal({
+                            to: "EQBl7aOQEoRi-I5qgctzI89gAnsbV6exEMKrsa5yDp7ZPcZE",
+                            value: toNano("2.1"),
+                            body: "RegisterWorker",
+                        })
+                    ]
+                });
+                console.log("🚀 TRANSACTION ENVOYÉE !");
+                return;
+            }
         }
-
-        console.log(`✅ Utilisation de l'adresse : ${activeContract.address.toString()}`);
-        
-        await activeContract.sendTransfer({
-            seqno: await activeContract.getSeqno(),
-            secretKey: key.secretKey,
-            messages: [
-                internal({
-                    to: "EQBl7aOQEoRi-I5qgctzI89gAnsbV6exEMKrsa5yDp7ZPcZE",
-                    value: toNano("2.1"),
-                    body: "RegisterWorker",
-                })
-            ]
-        });
-
-        console.log("🚀 TRANSACTION D'INSCRIPTION ENVOYÉE !");
+        console.log("\n❌ Aucun wallet avec du solde n'a été trouvé. Vérifie l'orthographe de tes 24 mots dans le .env");
     } catch (e) {
-        console.error("❌ ERREUR :", e.message);
+        if (e.message.includes("429")) {
+            console.error("⏳ Erreur 429 : Trop de requêtes. Attends 2 minutes avant de réessayer.");
+        } else {
+            console.error("❌ ERREUR :", e.message);
+        }
     }
 }
 main();
